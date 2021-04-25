@@ -220,6 +220,8 @@ static int handle_netlink(struct nl_cache_ops *unused, struct genl_cmd *cmd,
 		ret = device_add(ctx, buf,
 				 nla_get_string(info->attrs[TCMU_ATTR_DEVICE]),
 				 false);
+		if (ret == -ENOENT)
+			return 0;
 		break;
 	case TCMU_CMD_REMOVED_DEVICE:
 		reply_cmd = TCMU_CMD_REMOVED_DEVICE_DONE;
@@ -562,8 +564,10 @@ static int device_add(struct tcmulib_context *ctx, char *dev_name,
 
 	dev->handler = find_handler(ctx, dev->cfgstring);
 	if (!dev->handler) {
-		tcmu_err("could not find handler for %s\n", dev->dev_name);
-		goto err_free;
+		tcmu_warn("could not find handler for %s\n", dev->dev_name);
+		goto err_nohandler;
+		// tcmu_err("could not find handler for %s\n", dev->dev_name);
+		// goto err_free;
 	}
 
 	if (dev->handler->check_config &&
@@ -624,6 +628,10 @@ err_unblock:
 	if (reopen && reset_supp)
 		tcmu_cfgfs_dev_exec_action(dev, "block_dev", 0);
 err_free:
+	free(dev);
+	return -1;
+
+err_nohandler:
 	free(dev);
 	return -ENOENT;
 }
@@ -1064,7 +1072,7 @@ tcmu_dev_get_memory_info(struct tcmu_device *dev, void **base,
 			/* get length of map from file */
 			ssize_t size;
 			char *size_name;
-			
+
 			if (asprintf(&size_name, sizefmt, dev->dev_name) == -1) {
 				tcmu_err("cannot construct device map size filename\n");
 				goto err_free;
